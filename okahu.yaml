@@ -1,4 +1,4 @@
-workflow_name: cicd_test
+workflow_name: cicd_azure_provisioning
 
 instrument:
   - package: deploy_app
