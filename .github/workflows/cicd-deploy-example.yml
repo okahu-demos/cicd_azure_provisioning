@@ -54,7 +54,7 @@ jobs:
         id: create_issue
         if: steps.deploy.outcome == 'failure' || steps.deploy.outputs.deploy_exit_code != '0'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
           CICD_OKAHU_APP_NAME: ${{ secrets.CICD_OKAHU_APP_NAME }}
         run: |
           cat > issue_body.md << 'EOF'
@@ -98,7 +98,7 @@ jobs:
       - name: Comment @kahu investigate on issue
         if: steps.deploy.outcome == 'failure' || steps.deploy.outputs.deploy_exit_code != '0'
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
           CICD_OKAHU_APP_NAME: ${{ secrets.CICD_OKAHU_APP_NAME }}
         run: |
           set -euo pipefail

@@ -144,7 +144,7 @@ jobs:
 
     - name: Post SRE Agent response as comment
       env:
-        GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GH_PAT }}
         AGENT_RESPONSE: ${{ steps.sre_agent.outputs.response }}
         ISSUE_NUMBER: ${{ github.event.issue.number }}
       run: |
