@@ -1,0 +1,155 @@
+name: Kahu SRE Agent
+
+on:
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  kahu:
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@kahu')) ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@kahu'))
+
+    steps:
+    - name: Extract @kahu query and context
+      id: extract
+      env:
+        ISSUE_BODY: ${{ github.event.issue.body }}
+        COMMENT_BODY: ${{ github.event.comment.body }}
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        set -euo pipefail
+
+        if [ "$EVENT_NAME" = "issue_comment" ]; then
+          TEXT="$COMMENT_BODY"
+        else
+          TEXT="$ISSUE_BODY"
+        fi
+
+        QUERY=$(echo "$TEXT" | sed -n 's/.*@kahu[[:space:]]*//p' | head -1)
+        if [ -z "$QUERY" ]; then
+          QUERY="investigate this issue"
+        fi
+
+        printf 'query=%s\n' "$QUERY" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve GitHub run ID to trace IDs
+      id: traces
+      env:
+        OKAHU_API_KEY: ${{ secrets.OKAHU_API_KEY }}
+        CICD_OKAHU_APP_NAME: ${{ secrets.CICD_OKAHU_APP_NAME }}
+        QUERY: ${{ steps.extract.outputs.query }}
+      run: |
+        set -euo pipefail
+
+        APP="${CICD_OKAHU_APP_NAME:-unknown_app}"
+
+        # Extract GitHub run ID (long numeric string, optionally prefixed with github_)
+        RUN_ID=$(echo "$QUERY" | grep -oE '(github_)?[0-9]{10,}' | head -1 | sed 's/^github_//')
+
+        if [ -z "$RUN_ID" ]; then
+          echo "No GitHub run ID found in query"
+          echo "trace_ids=" >> "$GITHUB_OUTPUT"
+          echo "trace_context=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "Fetching traces for github_${RUN_ID} on app ${APP}..."
+        TRACES_RESPONSE=$(curl -s \
+          "https://api.okahu.co/api/v1/apps/${APP}/traces?duration_fact=test_runs&fact_ids=github_${RUN_ID}" \
+          -H "x-api-key: ${OKAHU_API_KEY}")
+
+        TRACE_IDS=$(echo "$TRACES_RESPONSE" | jq -r '.traces[]?.trace_id // empty' 2>/dev/null)
+        if [ -z "$TRACE_IDS" ]; then
+          echo "No traces found for github_${RUN_ID}"
+          echo "trace_ids=" >> "$GITHUB_OUTPUT"
+          echo "trace_context=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "Found trace IDs: $TRACE_IDS"
+
+        # Fetch spans for each trace to build context
+        SPAN_SUMMARY=""
+        for TRACE_ID in $TRACE_IDS; do
+          WORKFLOW_NAME=$(echo "$TRACES_RESPONSE" | jq -r --arg tid "$TRACE_ID" '.traces[] | select(.trace_id == $tid) | .workflow_name // empty' 2>/dev/null)
+          if [ -n "$WORKFLOW_NAME" ]; then
+            SPANS=$(curl -s \
+              "https://api.okahu.co/api/v1/workflows/${WORKFLOW_NAME}/traces/${TRACE_ID}/spans" \
+              -H "x-api-key: ${OKAHU_API_KEY}")
+            SPAN_COUNT=$(echo "$SPANS" | jq '.spans | length' 2>/dev/null || echo "0")
+            SPAN_SUMMARY="${SPAN_SUMMARY}Trace ${TRACE_ID} (workflow: ${WORKFLOW_NAME}, spans: ${SPAN_COUNT}). "
+          fi
+        done
+
+        TRACE_ID_LIST=$(echo "$TRACE_IDS" | tr '\n' ',' | sed 's/,$//')
+        printf 'trace_ids=%s\n' "$TRACE_ID_LIST" >> "$GITHUB_OUTPUT"
+        {
+          echo "trace_context<<TRACE_CTX_EOF"
+          echo "Resolved trace IDs: ${TRACE_ID_LIST}. ${SPAN_SUMMARY}"
+          echo "TRACE_CTX_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Call Kahu SRE Agent API
+      id: sre_agent
+      env:
+        OKAHU_API_KEY: ${{ secrets.OKAHU_API_KEY }}
+        CICD_OKAHU_APP_NAME: ${{ secrets.CICD_OKAHU_APP_NAME }}
+        QUERY: ${{ steps.extract.outputs.query }}
+        TRACE_IDS: ${{ steps.traces.outputs.trace_ids }}
+        TRACE_CONTEXT: ${{ steps.traces.outputs.trace_context }}
+      run: |
+        set -euo pipefail
+
+        APP="${CICD_OKAHU_APP_NAME:-unknown_app}"
+
+        if [ -n "$TRACE_IDS" ]; then
+          FULL_QUERY="For app ${APP}, ${QUERY}. Here are the trace IDs: ${TRACE_IDS}"
+        else
+          FULL_QUERY="For app ${APP}, ${QUERY}"
+        fi
+
+        RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+          "https://sre-agent.okahu.co/api/v1/ask_agent" \
+          -H "Content-Type: application/json" \
+          -H "x-api-key: ${OKAHU_API_KEY}" \
+          -d "$(jq -n --arg q "$FULL_QUERY" '{query: $q}')")
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+        BODY=$(echo "$RESPONSE" | sed '$d')
+
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "SRE Agent API returned HTTP ${HTTP_CODE}"
+          echo "response=Error: SRE Agent API returned HTTP ${HTTP_CODE}" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        AGENT_RESPONSE=$(echo "$BODY" | jq -r '.response // empty')
+        if [ -z "$AGENT_RESPONSE" ]; then
+          AGENT_RESPONSE="No response content from SRE Agent."
+        fi
+
+        {
+          echo "response<<KAHU_EOF"
+          echo "$AGENT_RESPONSE"
+          echo "KAHU_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Post SRE Agent response as comment
+      env:
+        GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+        AGENT_RESPONSE: ${{ steps.sre_agent.outputs.response }}
+        ISSUE_NUMBER: ${{ github.event.issue.number }}
+      run: |
+        set -euo pipefail
+
+        COMMENT_BODY="$(printf '### RESPONSE FROM KAHU\n\n%s\n\n---\n*Response from [Okahu SRE Agent](https://okahu.co)*' "$AGENT_RESPONSE")"
+
+        gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$COMMENT_BODY"

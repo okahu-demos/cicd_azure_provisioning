@@ -1,0 +1,41 @@
+$ az kusto cluster create --cluster-name okahu-adx-analytics --resource-group rg-okahu-prod-eastus --location eastus --sku name="Standard_E8ads_v5" tier="Standard" capacity=2 --output json
+ - Running ..
+{
+  "id": "/subscriptions/e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17/resourceGroups/rg-okahu-prod-eastus/providers/Microsoft.Kusto/Clusters/okahu-adx-analytics",
+  "name": "okahu-adx-analytics",
+  "type": "Microsoft.Kusto/Clusters",
+  "location": "eastus",
+  "properties": {
+    "provisioningState": "Succeeded",
+    "state": "Running",
+    "uri": "https://okahu-adx-analytics.eastus.kusto.windows.net",
+    "dataIngestionUri": "https://ingest-okahu-adx-analytics.eastus.kusto.windows.net",
+    "enableStreamingIngest": false,
+    "enablePurge": false,
+    "enableDiskEncryption": false,
+    "enableAutoStop": true,
+    "engineType": "V3",
+    "publicNetworkAccess": "Enabled"
+  },
+  "sku": { "name": "Standard_E8ads_v5", "capacity": 2, "tier": "Standard" },
+  "etag": "\"3a0f8c72-0000-0200-0000-662f1a3b0000\""
+}
+
+$ az kusto database create --cluster-name okahu-adx-analytics --resource-group rg-okahu-prod-eastus --database-name TracesDB --read-write-database soft-delete-period=P365D hot-cache-period=P31D location=eastus --output json
+{
+  "id": "/subscriptions/e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17/resourceGroups/rg-okahu-prod-eastus/providers/Microsoft.Kusto/Clusters/okahu-adx-analytics/Databases/TracesDB",
+  "name": "okahu-adx-analytics/TracesDB",
+  "provisioningState": "Succeeded",
+  "type": "Microsoft.Kusto/Clusters/Databases"
+}
+
+$ az kusto script create --cluster-name okahu-adx-analytics --database-name TracesDB --resource-group rg-okahu-prod-eastus --name create-tables --script-content ".create table SpanEvents (Timestamp: datetime, TraceId: string, SpanId: string, OperationName: string, Duration: real, StatusCode: int) with (docstring='Primary span events table', folder='Telemetry')"
+(BadRequest) Script execution failed with the following error: Semantic error: SEM0100: 'create' is not a recognized command. Use '.create table' syntax.
+Code: BadRequest
+Message: Script execution failed with the following error: Semantic error: SEM0100: 'create' is not a recognized command. Use '.create table' syntax.
+Target: create-tables
+Details: [{
+  "code": "ScriptExecutionError",
+  "message": "1 of 1 commands failed. Error on line 1: Semantic error: SEM0100. The provided KQL script contains syntax errors.",
+  "target": "/subscriptions/e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17/resourceGroups/rg-okahu-prod-eastus/providers/Microsoft.Kusto/Clusters/okahu-adx-analytics/Databases/TracesDB/Scripts/create-tables"
+}]

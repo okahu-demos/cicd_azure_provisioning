@@ -1,0 +1,37 @@
+workflow_name: cicd_test
+
+instrument:
+  - package: deploy_app
+    method: deploy_azure_blob
+    span_name: azure_blob.deploy
+    inputs:
+      include: [account_name, resource_group, location]
+    output:
+      extract: [return_value]
+
+  - package: deploy_app
+    class: AzureSQLDeploy
+    method: deploy
+    span_name: azure_sql.deploy
+    inputs:
+      include: [server_name, database_name, resource_group]
+    output:
+      extract: [return_value]
+
+  - package: deploy_app
+    class: KustoDeploy
+    method: deploy_tables
+    span_name: kusto.deploy_tables
+    inputs:
+      include: [cluster_name, database_name, tables]
+    output:
+      extract: [return_value]
+
+  - package: deploy_app
+    class: UserAccountProvision
+    method: create_accounts
+    span_name: user_account.provision
+    inputs:
+      include: [display_name, principal_name, role]
+    output:
+      extract: [return_value]

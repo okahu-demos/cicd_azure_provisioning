@@ -1,0 +1,21 @@
+$ az ad user create --display-name "svc-pipeline-runner" --user-principal-name svc-pipeline-runner@okahu.onmicrosoft.com --password "S3cur3P@ss!" --mail-nickname svc-pipeline-runner --output json
+(Request_ResourceNotFound) Resource 'e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17' does not exist or one of its queried reference-property objects are not present.
+Code: Request_ResourceNotFound
+Message: Resource 'e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17' does not exist or one of its queried reference-property objects are not present.
+
+$ az ad user create --display-name "deploy-bot" --user-principal-name deploy-bot@okahu.onmicrosoft.com --password "Tmp#92xK!v" --force-change-password-next-sign-in true --output json
+ERROR: (Authorization_RequestDenied) Insufficient privileges to complete the operation.
+Code: Authorization_RequestDenied
+Message: Insufficient privileges to complete the operation.
+Inner error: {
+  "date": "2026-04-28T15:12:44",
+  "request-id": "cb9f0873-fe4e-45ee-a6af-d06489a8b8b0",
+  "client-request-id": "cb9f0873-fe4e-45ee-a6af-d06489a8b8b0"
+}
+
+$ az ad signed-in-user show --query "{upn:userPrincipalName, roles:assignedPlans[].service}" --output table
+Upn                                      Roles
+---------------------------------------  -------------------------
+ci-deployer@okahu.onmicrosoft.com        ["exchange","SharePoint"]
+
+ERROR: Service principal 'ci-deployer' lacks role 'User Administrator' or 'Global Administrator' on tenant okahu.onmicrosoft.com

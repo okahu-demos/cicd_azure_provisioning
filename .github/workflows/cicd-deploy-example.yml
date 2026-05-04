@@ -1,0 +1,127 @@
+name: CI/CD Deploy Example
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      OKAHU_API_KEY: ${{ secrets.OKAHU_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install "monocle_apptrace @ git+https://github.com/hocokahu/monocle.git@hoc/claude-skill#subdirectory=apptrace" pyyaml
+
+      - name: Load .env and set exporters
+        run: |
+          if [ -f .env ]; then
+            export $(grep -v '^#' .env | xargs)
+          fi
+          EXPORTERS="file"
+          if [ -n "$OKAHU_API_KEY" ]; then
+            EXPORTERS="file,okahu"
+            echo "OKAHU_API_KEY=$OKAHU_API_KEY" >> $GITHUB_ENV
+          fi
+          if [ -n "$OKAHU_INGESTION_ENDPOINT" ]; then
+            echo "OKAHU_INGESTION_ENDPOINT=$OKAHU_INGESTION_ENDPOINT" >> $GITHUB_ENV
+          fi
+          echo "MONOCLE_EXPORTERS=$EXPORTERS" >> $GITHUB_ENV
+
+      - name: Run deployment pipeline
+        id: deploy
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          if [ -f okahu.yaml ]; then
+            python -m monocle_apptrace --config okahu.yaml deploy_app.py 2>&1 | tee output.txt
+          else
+            python deploy_app.py 2>&1 | tee output.txt
+          fi
+          echo "deploy_exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Issue on Deploy Failure
+        id: create_issue
+        if: steps.deploy.outcome == 'failure' || steps.deploy.outputs.deploy_exit_code != '0'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CICD_OKAHU_APP_NAME: ${{ secrets.CICD_OKAHU_APP_NAME }}
+        run: |
+          cat > issue_body.md << 'EOF'
+          ## Okahu Environment: Okahu-prod
+
+          ## Deploy Failure: deploy_app.py
+
+          The deployment workflow `cicd-deploy-example.yml` failed.
+
+          ### Workflow Error Output
+
+          ```
+          EOF
+          if [ -f output.txt ]; then
+            cat output.txt >> issue_body.md
+          else
+            echo "Deploy output not available" >> issue_body.md
+          fi
+          cat >> issue_body.md << 'EOF'
+          ```
+          EOF
+
+          cat >> issue_body.md << 'EOF'
+
+          ---
+
+          *This issue was automatically created by the GitHub Actions workflow.*
+          EOF
+
+          echo "" >> issue_body.md
+          echo "- Workflow Run ID: ${GITHUB_RUN_ID}" >> issue_body.md
+          echo "- GitHub Actor: ${GITHUB_ACTOR}" >> issue_body.md
+
+          TITLE="Deploy Failure: deploy_app.py - $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          ISSUE_URL=$(gh issue create --title "$TITLE" --body-file issue_body.md)
+          echo "Created issue: $ISSUE_URL"
+          ISSUE_NUM=$(echo "$ISSUE_URL" | sed -n 's|.*/issues/\([0-9]*\)|\1|p')
+          echo "ISSUE_NUM=$ISSUE_NUM" >> $GITHUB_ENV
+          echo "issue_number=$ISSUE_NUM" >> $GITHUB_OUTPUT
+
+      - name: Comment @kahu investigate on issue
+        if: steps.deploy.outcome == 'failure' || steps.deploy.outputs.deploy_exit_code != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          CICD_OKAHU_APP_NAME: ${{ secrets.CICD_OKAHU_APP_NAME }}
+        run: |
+          set -euo pipefail
+          APP="${CICD_OKAHU_APP_NAME:-unknown_app}"
+          BODY="$(printf '@kahu investigate deploy failure on github_%s for app %s' "${GITHUB_RUN_ID}" "${APP}")"
+          gh issue comment "${ISSUE_NUM}" --body "${BODY}"
+
+      - name: Upload deployment log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-log
+          path: output.txt
+
+      - name: Upload traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monocle-traces
+          path: .monocle/
+
+      - name: Fail job if deploy failed
+        if: steps.deploy.outcome == 'failure' || steps.deploy.outputs.deploy_exit_code != '0'
+        run: |
+          echo "Deployment failed. GitHub issue has been created."
+          exit 1
