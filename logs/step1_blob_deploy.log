@@ -1,0 +1,55 @@
+$ az storage account create --name oklogstorage2026 --resource-group rg-okahu-prod-eastus --location eastus --sku Standard_GRS --kind StorageV2 --min-tls-version TLS1_2 --output json
+{
+  "accessTier": "Hot",
+  "allowBlobPublicAccess": false,
+  "allowCrossTenantReplication": false,
+  "allowSharedKeyAccess": true,
+  "creationTime": "2026-04-28T14:32:07.819604+00:00",
+  "enableHttpsTrafficOnly": true,
+  "encryption": {
+    "keySource": "Microsoft.Storage",
+    "services": {
+      "blob": { "enabled": true, "keyType": "Account", "lastEnabledTime": "2026-04-28T14:32:07.913352+00:00" },
+      "file": { "enabled": true, "keyType": "Account", "lastEnabledTime": "2026-04-28T14:32:07.913352+00:00" }
+    }
+  },
+  "id": "/subscriptions/e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17/resourceGroups/rg-okahu-prod-eastus/providers/Microsoft.Storage/storageAccounts/oklogstorage2026",
+  "isHnsEnabled": false,
+  "kind": "StorageV2",
+  "location": "eastus",
+  "minimumTlsVersion": "TLS1_2",
+  "name": "oklogstorage2026",
+  "networkRuleSet": {
+    "bypass": "AzureServices",
+    "defaultAction": "Deny",
+    "ipRules": [],
+    "virtualNetworkRules": [
+      { "id": "/subscriptions/e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17/resourceGroups/rg-okahu-prod-eastus/providers/Microsoft.Network/virtualNetworks/vnet-okahu-prod/subnets/snet-data", "action": "Allow" }
+    ]
+  },
+  "primaryEndpoints": {
+    "blob": "https://oklogstorage2026.blob.core.windows.net/",
+    "dfs": "https://oklogstorage2026.dfs.core.windows.net/",
+    "file": "https://oklogstorage2026.file.core.windows.net/",
+    "queue": "https://oklogstorage2026.queue.core.windows.net/",
+    "table": "https://oklogstorage2026.table.core.windows.net/",
+    "web": "https://oklogstorage2026.z13.web.core.windows.net/"
+  },
+  "primaryLocation": "eastus",
+  "provisioningState": "Succeeded",
+  "resourceGroup": "rg-okahu-prod-eastus",
+  "secondaryLocation": "westus",
+  "sku": { "name": "Standard_GRS", "tier": "Standard" },
+  "statusOfPrimary": "available",
+  "statusOfSecondary": "available",
+  "tags": { "environment": "production", "team": "okahu-platform" },
+  "type": "Microsoft.Storage/storageAccounts"
+}
+
+$ az storage container create --name telemetry-ingest --account-name oklogstorage2026 --auth-mode login --output json
+{
+  "created": true
+}
+
+$ az storage account show-connection-string --name oklogstorage2026 --resource-group rg-okahu-prod-eastus --output tsv
+DefaultEndpointsProtocol=https;AccountName=oklogstorage2026;AccountKey=***;EndpointSuffix=core.windows.net

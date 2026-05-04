@@ -1,0 +1,196 @@
+name: CI/CD Deploy Issue Summary
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      OKAHU_API_KEY: ${{ secrets.OKAHU_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install "monocle_apptrace @ git+https://github.com/hocokahu/monocle.git@hoc/claude-skill#subdirectory=apptrace" pyyaml
+
+      - name: Load .env and set exporters
+        env:
+          OKAHU_INGESTION_ENDPOINT: ${{ secrets.OKAHU_INGESTION_ENDPOINT }}
+        run: |
+          if [ -f .env ]; then
+            export $(grep -v '^#' .env | xargs)
+          fi
+          EXPORTERS="file"
+          if [ -n "$OKAHU_API_KEY" ]; then
+            EXPORTERS="file,okahu"
+            echo "OKAHU_API_KEY=$OKAHU_API_KEY" >> $GITHUB_ENV
+          fi
+          if [ -n "$OKAHU_INGESTION_ENDPOINT" ]; then
+            echo "OKAHU_INGESTION_ENDPOINT=$OKAHU_INGESTION_ENDPOINT" >> $GITHUB_ENV
+          fi
+          echo "MONOCLE_EXPORTER=$EXPORTERS" >> $GITHUB_ENV
+
+      - name: Run deployment pipeline
+        id: deploy
+        continue-on-error: true
+        run: |
+          set +e
+          if [ -f okahu.yaml ]; then
+            python -m monocle_apptrace --config okahu.yaml deploy_app.py > output.txt 2>&1; EXIT_CODE=$?
+          else
+            python deploy_app.py > output.txt 2>&1; EXIT_CODE=$?
+          fi
+          cat output.txt
+          echo "deploy_exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+          exit $EXIT_CODE
+
+      - name: Resolve traces for this run
+        id: traces
+        if: steps.deploy.outcome == 'failure' || steps.deploy.outputs.deploy_exit_code != '0'
+        env:
+          OKAHU_API_KEY: ${{ secrets.OKAHU_API_KEY }}
+          CICD_OKAHU_APP_NAME: ${{ secrets.CICD_OKAHU_APP_NAME }}
+          OKAHU_INGESTION_ENDPOINT: ${{ secrets.OKAHU_INGESTION_ENDPOINT }}
+        run: |
+          set -euo pipefail
+
+          APP="${CICD_OKAHU_APP_NAME:-unknown_app}"
+
+          if echo "${OKAHU_INGESTION_ENDPOINT:-}" | grep -q "stage"; then
+            API_BASE="https://api-stage.okahu.co"
+          else
+            API_BASE="https://api.okahu.co"
+          fi
+
+          echo "Waiting for traces to be ingested..."
+          sleep 10
+
+          echo "Fetching traces for github_${GITHUB_RUN_ID} on app ${APP}..."
+          TRACES_RESPONSE=$(curl -s \
+            "${API_BASE}/api/v1/apps/${APP}/traces?duration_fact=test_runs&fact_ids=github_${GITHUB_RUN_ID}" \
+            -H "x-api-key: ${OKAHU_API_KEY}")
+
+          TRACE_IDS=$(echo "$TRACES_RESPONSE" | jq -r '.traces[]?.trace_id // empty' 2>/dev/null)
+          if [ -z "$TRACE_IDS" ]; then
+            echo "No traces found for github_${GITHUB_RUN_ID}"
+            echo "trace_ids=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Found trace IDs: $TRACE_IDS"
+          TRACE_ID_LIST=$(echo "$TRACE_IDS" | tr '\n' ',' | sed 's/,$//')
+          printf 'trace_ids=%s\n' "$TRACE_ID_LIST" >> "$GITHUB_OUTPUT"
+
+      - name: Call Kahu SRE Agent
+        id: kahu
+        if: steps.deploy.outcome == 'failure' || steps.deploy.outputs.deploy_exit_code != '0'
+        env:
+          OKAHU_API_KEY: ${{ secrets.OKAHU_API_KEY }}
+          CICD_OKAHU_APP_NAME: ${{ secrets.CICD_OKAHU_APP_NAME }}
+          OKAHU_SRE_AGENT_URL: ${{ secrets.OKAHU_SRE_AGENT_URL }}
+          TRACE_IDS: ${{ steps.traces.outputs.trace_ids }}
+        run: |
+          set -euo pipefail
+
+          APP="${CICD_OKAHU_APP_NAME:-unknown_app}"
+          SRE_URL="${OKAHU_SRE_AGENT_URL:-https://sre-agent.okahu.co/api/v1/ask_agent}"
+
+          read -r -d '' QUERY << 'PROMPT' || true
+          Investigate deploy failure for this CI/CD run. For each trace, look at the spans in detail — especially the data.output events which contain the full console output and error messages from each deployment step.
+
+          Format your response as follows:
+          1. Start with a brief SUMMARY section at the top: one paragraph stating what failed, the root cause, and the immediate next steps to resolve it.
+          2. For failed or warning steps: provide detailed root cause analysis citing actual error messages from data.output, specific recommendations to fix, and files/configurations to check.
+          3. For successful steps: just list them in one line each (e.g. "azure_blob.deploy: succeeded"). Do not elaborate on successful steps.
+          PROMPT
+          QUERY="For app ${APP}, run github_${GITHUB_RUN_ID}: ${QUERY}"
+          if [ -n "${TRACE_IDS:-}" ]; then
+            QUERY="${QUERY} Trace IDs: ${TRACE_IDS}"
+          fi
+
+          echo "Calling Kahu SRE Agent..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "${SRE_URL}" \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: ${OKAHU_API_KEY}" \
+            -d "$(jq -n --arg q "$QUERY" '{query: $q}')")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "SRE Agent API returned HTTP ${HTTP_CODE}"
+            {
+              echo "response<<KAHU_EOF"
+              echo "Kahu SRE Agent returned HTTP ${HTTP_CODE}. Deploy output is in the workflow artifacts."
+              echo "KAHU_EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          AGENT_RESPONSE=$(echo "$BODY" | jq -r '.response // empty')
+          if [ -z "$AGENT_RESPONSE" ]; then
+            AGENT_RESPONSE="No response content from SRE Agent."
+          fi
+
+          {
+            echo "response<<KAHU_EOF"
+            echo "$AGENT_RESPONSE"
+            echo "KAHU_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Issue with Kahu response
+        if: steps.deploy.outcome == 'failure' || steps.deploy.outputs.deploy_exit_code != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          AGENT_RESPONSE: ${{ steps.kahu.outputs.response }}
+        run: |
+          set -euo pipefail
+
+          TITLE="Deploy Failure: deploy_app.py - $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+
+          cat > issue_body.md << EOF
+          ### RESPONSE FROM KAHU
+
+          ${AGENT_RESPONSE:-Kahu SRE Agent did not return a response. Check workflow run ${GITHUB_RUN_ID} artifacts for deploy output.}
+
+          ---
+
+          - Workflow Run ID: ${GITHUB_RUN_ID}
+          - GitHub Actor: ${GITHUB_ACTOR}
+
+          *Response from [Okahu SRE Agent](https://okahu.co)*
+          EOF
+
+          ISSUE_URL=$(gh issue create --title "$TITLE" --body-file issue_body.md)
+          echo "Created issue: $ISSUE_URL"
+
+      - name: Upload deployment log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-log
+          path: output.txt
+
+      - name: Upload traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monocle-traces
+          path: .monocle/
+
+      - name: Fail job if deploy failed
+        if: steps.deploy.outcome == 'failure' || steps.deploy.outputs.deploy_exit_code != '0'
+        run: |
+          echo "Deployment failed. GitHub issue has been created with Kahu analysis."
+          exit 1

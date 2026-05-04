@@ -1,0 +1,68 @@
+$ az sql server show --name okahu-sql-prod --resource-group rg-okahu-prod-eastus --output json
+{
+  "administratorLogin": "okahu-admin",
+  "fullyQualifiedDomainName": "okahu-sql-prod.database.windows.net",
+  "id": "/subscriptions/e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17/resourceGroups/rg-okahu-prod-eastus/providers/Microsoft.Sql/servers/okahu-sql-prod",
+  "location": "eastus",
+  "minimalTlsVersion": "1.2",
+  "name": "okahu-sql-prod",
+  "publicNetworkAccess": "Enabled",
+  "state": "Ready",
+  "type": "Microsoft.Sql/servers",
+  "version": "12.0"
+}
+
+$ az sql server firewall-rule list --server okahu-sql-prod --resource-group rg-okahu-prod-eastus --output table
+Name                    StartIpAddress    EndIpAddress
+----------------------  ----------------  ----------------
+AllowAzureServices      0.0.0.0           0.0.0.0
+office-vpn              203.0.113.0       203.0.113.255
+ci-runner-pool          10.1.4.0          10.1.4.255
+temp-debug-access       0.0.0.0           255.255.255.255
+
+WARNING: Firewall rule 'temp-debug-access' allows access from ALL IP addresses (0.0.0.0 - 255.255.255.255). This is a security risk in production.
+
+$ az sql db create --resource-group rg-okahu-prod-eastus --server okahu-sql-prod --name okahu-traces-db --service-objective GP_S_Gen5_2 --auto-pause-delay 60 --min-capacity 0.5 --output json
+{
+  "autoPauseDelay": 60,
+  "catalogCollation": "SQL_Latin1_General_CP1_CI_AS",
+  "collation": "SQL_Latin1_General_CP1_CI_AS",
+  "creationDate": "2026-04-28T14:45:22.747Z",
+  "currentServiceObjectiveName": "GP_S_Gen5_2",
+  "currentSku": {
+    "capacity": 2,
+    "family": "Gen5",
+    "name": "GP_S_Gen5",
+    "tier": "GeneralPurpose"
+  },
+  "databaseId": "a8f3c6e1-29d4-4b7a-8e15-6f0d9c3b2a48",
+  "defaultSecondaryLocation": "westus",
+  "earliestRestoreDate": "2026-04-28T14:50:41Z",
+  "id": "/subscriptions/e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17/resourceGroups/rg-okahu-prod-eastus/providers/Microsoft.Sql/servers/okahu-sql-prod/databases/okahu-traces-db",
+  "kind": "v12.0,user,vcore,serverless",
+  "location": "eastus",
+  "maxLogSizeBytes": 68719476736,
+  "maxSizeBytes": 34359738368,
+  "minCapacity": 0.5,
+  "name": "okahu-traces-db",
+  "readReplicaCount": 0,
+  "readScale": "Disabled",
+  "requestedServiceObjectiveName": "GP_S_Gen5_2",
+  "resourceGroup": "rg-okahu-prod-eastus",
+  "status": "Online",
+  "tags": { "environment": "production" },
+  "type": "Microsoft.Sql/servers/databases",
+  "zoneRedundant": false
+}
+
+$ az sql db audit-policy show --resource-group rg-okahu-prod-eastus --server okahu-sql-prod --name okahu-traces-db --output json
+{
+  "auditActionsAndGroups": [],
+  "isAzureMonitorTargetEnabled": false,
+  "isManagedIdentityInUse": false,
+  "isStorageSecondaryKeyInUse": false,
+  "retentionDays": 0,
+  "state": "Disabled"
+}
+
+WARNING: Audit logging is DISABLED on database 'okahu-traces-db'. Compliance requires audit logging enabled for production databases.
