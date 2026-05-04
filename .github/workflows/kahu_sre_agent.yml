@@ -45,11 +45,19 @@ jobs:
       env:
         OKAHU_API_KEY: ${{ secrets.OKAHU_API_KEY }}
         CICD_OKAHU_APP_NAME: ${{ secrets.CICD_OKAHU_APP_NAME }}
+        OKAHU_INGESTION_ENDPOINT: ${{ secrets.OKAHU_INGESTION_ENDPOINT }}
         QUERY: ${{ steps.extract.outputs.query }}
       run: |
         set -euo pipefail
 
         APP="${CICD_OKAHU_APP_NAME:-unknown_app}"
+
+        # Derive API base URL from ingestion endpoint (stage vs prod)
+        if echo "${OKAHU_INGESTION_ENDPOINT:-}" | grep -q "stage"; then
+          API_BASE="https://api-stage.okahu.co"
+        else
+          API_BASE="https://api.okahu.co"
+        fi
 
         # Extract GitHub run ID (long numeric string, optionally prefixed with github_)
         RUN_ID=$(echo "$QUERY" | grep -oE '(github_)?[0-9]{10,}' | head -1 | sed 's/^github_//')
@@ -63,7 +71,7 @@ jobs:
 
         echo "Fetching traces for github_${RUN_ID} on app ${APP}..."
         TRACES_RESPONSE=$(curl -s \
-          "https://api.okahu.co/api/v1/apps/${APP}/traces?duration_fact=test_runs&fact_ids=github_${RUN_ID}" \
+          "${API_BASE}/api/v1/apps/${APP}/traces?duration_fact=test_runs&fact_ids=github_${RUN_ID}" \
           -H "x-api-key: ${OKAHU_API_KEY}")
 
         TRACE_IDS=$(echo "$TRACES_RESPONSE" | jq -r '.traces[]?.trace_id // empty' 2>/dev/null)
@@ -82,7 +90,7 @@ jobs:
           WORKFLOW_NAME=$(echo "$TRACES_RESPONSE" | jq -r --arg tid "$TRACE_ID" '.traces[] | select(.trace_id == $tid) | .workflow_name // empty' 2>/dev/null)
           if [ -n "$WORKFLOW_NAME" ]; then
             SPANS=$(curl -s \
-              "https://api.okahu.co/api/v1/workflows/${WORKFLOW_NAME}/traces/${TRACE_ID}/spans" \
+              "${API_BASE}/api/v1/workflows/${WORKFLOW_NAME}/traces/${TRACE_ID}/spans" \
               -H "x-api-key: ${OKAHU_API_KEY}")
             SPAN_COUNT=$(echo "$SPANS" | jq '.spans | length' 2>/dev/null || echo "0")
             SPAN_SUMMARY="${SPAN_SUMMARY}Trace ${TRACE_ID} (workflow: ${WORKFLOW_NAME}, spans: ${SPAN_COUNT}). "
@@ -102,6 +110,7 @@ jobs:
       env:
         OKAHU_API_KEY: ${{ secrets.OKAHU_API_KEY }}
         CICD_OKAHU_APP_NAME: ${{ secrets.CICD_OKAHU_APP_NAME }}
+        OKAHU_SRE_AGENT_URL: ${{ secrets.OKAHU_SRE_AGENT_STAGE_URL }}
         QUERY: ${{ steps.extract.outputs.query }}
         TRACE_IDS: ${{ steps.traces.outputs.trace_ids }}
         TRACE_CONTEXT: ${{ steps.traces.outputs.trace_context }}
@@ -109,6 +118,7 @@ jobs:
         set -euo pipefail
 
         APP="${CICD_OKAHU_APP_NAME:-unknown_app}"
+        SRE_URL="${OKAHU_SRE_AGENT_URL:-https://sre-agent-stage.okahu.co/api/v1/ask_agent}"
 
         if [ -n "$TRACE_IDS" ]; then
           FULL_QUERY="For app ${APP}, ${QUERY}. Here are the trace IDs: ${TRACE_IDS}"
@@ -117,7 +127,7 @@ jobs:
         fi
 
         RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-          "https://sre-agent.okahu.co/api/v1/ask_agent" \
+          "${SRE_URL}" \
           -H "Content-Type: application/json" \
           -H "x-api-key: ${OKAHU_API_KEY}" \
           -d "$(jq -n --arg q "$FULL_QUERY" '{query: $q}')")
