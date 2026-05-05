@@ -110,7 +110,7 @@ jobs:
       env:
         OKAHU_API_KEY: ${{ secrets.OKAHU_API_KEY }}
         CICD_OKAHU_APP_NAME: ${{ secrets.CICD_OKAHU_APP_NAME }}
-        OKAHU_SRE_AGENT_URL: ${{ secrets.OKAHU_SRE_AGENT_STAGE_URL }}
+        OKAHU_SRE_AGENT_URL: ${{ secrets.OKAHU_SRE_AGENT_URL }}
         QUERY: ${{ steps.extract.outputs.query }}
         TRACE_IDS: ${{ steps.traces.outputs.trace_ids }}
         TRACE_CONTEXT: ${{ steps.traces.outputs.trace_context }}
@@ -118,7 +118,7 @@ jobs:
         set -euo pipefail
 
         APP="${CICD_OKAHU_APP_NAME:-unknown_app}"
-        SRE_URL="${OKAHU_SRE_AGENT_URL:-https://sre-agent-stage.okahu.co/api/v1/ask_agent}"
+        SRE_URL="${OKAHU_SRE_AGENT_URL:-https://sre-agent.okahu.co/api/v1/ask_agent}"
 
         if [ -n "$TRACE_IDS" ]; then
           FULL_QUERY="For app ${APP}, ${QUERY}. Here are the trace IDs: ${TRACE_IDS}"
