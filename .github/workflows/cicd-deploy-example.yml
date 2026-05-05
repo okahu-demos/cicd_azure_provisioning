@@ -24,6 +24,8 @@ jobs:
           pip install "monocle_apptrace @ git+https://github.com/hocokahu/monocle.git@hoc/claude-skill#subdirectory=apptrace" pyyaml
 
       - name: Load .env and set exporters
+        env:
+          OKAHU_INGESTION_ENDPOINT: ${{ secrets.OKAHU_INGESTION_ENDPOINT }}
         run: |
           if [ -f .env ]; then
             export $(grep -v '^#' .env | xargs)
