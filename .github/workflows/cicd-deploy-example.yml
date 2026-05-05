@@ -38,7 +38,7 @@ jobs:
           if [ -n "$OKAHU_INGESTION_ENDPOINT" ]; then
             echo "OKAHU_INGESTION_ENDPOINT=$OKAHU_INGESTION_ENDPOINT" >> $GITHUB_ENV
           fi
-          echo "MONOCLE_EXPORTERS=$EXPORTERS" >> $GITHUB_ENV
+          echo "MONOCLE_EXPORTER=$EXPORTERS" >> $GITHUB_ENV
 
       - name: Run deployment pipeline
         id: deploy
