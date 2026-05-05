@@ -44,6 +44,7 @@ jobs:
         id: deploy
         continue-on-error: true
         run: |
+          set +e
           if [ -f okahu.yaml ]; then
             python -m monocle_apptrace --config okahu.yaml deploy_app.py > output.txt 2>&1; EXIT_CODE=$?
           else
