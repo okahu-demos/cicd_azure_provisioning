@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "okahu-stage": {
+      "type": "http",
+      "url": "https://okahu-mcp-stage.azurewebsites.net/mcp"
+    },
+    "okahu-prod": {
+      "type": "http",
+      "url": "https://mcp.okahu.co/mcp",
+      "headers": {
+        "x-api-key": "YOUR_OKAHU_API_KEY"
+      }
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
+      }
+    }
+  }
+}
