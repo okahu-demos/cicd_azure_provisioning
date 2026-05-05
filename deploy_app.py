@@ -1,17 +1,5 @@
 import os
 import sys
-import atexit
-
-def _flush_traces():
-    try:
-        from opentelemetry import trace
-        provider = trace.get_tracer_provider()
-        if hasattr(provider, 'force_flush'):
-            provider.force_flush(timeout_millis=5000)
-    except Exception:
-        pass
-
-atexit.register(_flush_traces)
 
 LOGS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 
