@@ -43,13 +43,15 @@ jobs:
       - name: Run deployment pipeline
         id: deploy
         continue-on-error: true
+        shell: bash --noprofile --norc -eo pipefail {0}
         run: |
+          set +e
           if [ -f okahu.yaml ]; then
-            python -m monocle_apptrace --config okahu.yaml deploy_app.py > output.txt 2>&1; EXIT_CODE=$?
+            python -m monocle_apptrace --config okahu.yaml deploy_app.py 2>&1 | tee output.txt
           else
-            python deploy_app.py > output.txt 2>&1; EXIT_CODE=$?
+            python deploy_app.py 2>&1 | tee output.txt
           fi
-          cat output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
           echo "deploy_exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
           exit $EXIT_CODE
 
