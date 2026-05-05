@@ -46,32 +46,29 @@ instrument:
 
 Each entry creates a `WrapperMethod` that captures function inputs/outputs as span events (`data.input`, `data.output`).
 
-### What Changed in monocle_apptrace
+### Files Changed in monocle_apptrace
 
-**File**: `apptrace/src/monocle_apptrace/__main__.py`
+All changes are on the [`hoc/claude-skill`](https://github.com/hocokahu/monocle/tree/hoc/claude-skill) branch of `hocokahu/monocle`.
 
-The original was an 18-line wrapper that derived `workflow_name` from the filename and called `setup_monocle_telemetry()` with no custom methods. The new version (241 lines) adds:
+#### `apptrace/src/monocle_apptrace/__main__.py`
 
-| Feature | What it does |
-|---------|-------------|
-| `--config FILE` | Parses `okahu.yaml` to build `WrapperMethod` entries with input/output processors |
-| Input/output capture | `_build_input_output_processor()` — captures function args and return values as span events |
-| Package pre-import | Imports target packages *after* `setup_monocle_telemetry` so wrapt post-import hooks fire |
-| Patched module execution | When the target module was already imported (and patched by wrapt), calls `target_module.main()` instead of `runpy.run_path` which bypasses patches |
-| CI scope injection | `_set_ci_scopes()` — detects `GITHUB_RUN_ID`, `GITHUB_SHA`, `GITHUB_WORKFLOW` and registers them as monocle scopes so Okahu indexes them as searchable facts |
-| Span flush on exit | Flushes `TracerProvider` (not the empty `MonocleSynchronousMultiSpanProcessor`) before process exit |
-| Backwards compatible | Without `--config`, behaves identically to the original |
+The CLI entry point for `python -m monocle_apptrace`. Key additions:
 
-### Bug Fixes (discovered during development)
+- **Lines 20–27** `_load_yaml_config()` — loads `okahu.yaml` config file
+- **Lines 30–113** `_build_input_output_processor()` — creates output processors that capture function args as `data.input` events and return values as `data.output` events on spans
+- **Lines 116–138** `_build_wrapper_methods()` — reads `instrument:` entries from config and builds `WrapperMethod` objects with `task_wrapper`/`atask_wrapper`
+- **Lines 141–155** `_set_ci_scopes()` — detects GitHub Actions env vars (`GITHUB_RUN_ID`, `GITHUB_SHA`, `GITHUB_WORKFLOW`) and registers them as monocle scopes via `set_scopes()`. This produces `scope.git.run.id = "github_{run_id}"` on every span, which Okahu indexes as a searchable fact.
+- **Lines 165–184** `main()` config handling — parses `--config`, builds wrapper methods, calls `setup_monocle_telemetry()` with `union_with_default_methods=True`
+- **Lines 196–197** — captures `TracerProvider` reference via `get_tracer_provider()` for reliable flush
+- **Lines 214–216** — flushes `TracerProvider` directly in `finally` block (not the empty `MonocleSynchronousMultiSpanProcessor`)
 
-| Fix | File | Description |
-|-----|------|-------------|
-| Span flush no-op | `__main__.py` | `get_monocle_span_processor().force_flush()` was flushing the empty `MonocleSynchronousMultiSpanProcessor`. `BatchSpanProcessor`s are added to the `TracerProvider`, not to it. Fixed to flush the `TracerProvider` directly. |
-| kwarg typo | `instrumentor.py` | `trace_provider=` vs `tracer_provider=` nullified the global tracer provider after setup |
+#### `apptrace/src/monocle_apptrace/instrumentation/common/span_handler.py`
 
-### Key Discovery: Scopes vs Span Attributes
+- **Lines 100–102** in `set_default_monocle_attributes()` — reads `GITHUB_RUN_ID` env var and sets `github.run_id` as a span attribute on every span
 
-Okahu indexes `scope.*` span attributes as searchable facts. Plain span attributes (like `github.run_id`) are NOT searchable via the fact API. The `_set_ci_scopes()` function uses monocle's `set_scopes()` → OTel baggage → `scope.git.run.id` attribute, which Okahu indexes and the SRE agent can query by.
+### Scopes vs Span Attributes
+
+Okahu indexes `scope.*` span attributes as searchable facts. Plain span attributes (like `github.run_id`) are NOT searchable via the fact API. The `_set_ci_scopes()` function uses monocle's `set_scopes()` → OTel baggage → `scope.git.run.id` attribute, which Okahu indexes and the SRE agent queries via `duration_fact=test_runs&fact_ids=github_{run_id}`.
 
 ## Environment Setup
 
