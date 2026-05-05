@@ -52,12 +52,6 @@ jobs:
             python deploy_app.py 2>&1 | tee output.txt
           fi
           EXIT_CODE=${PIPESTATUS[0]}
-          echo "--- Debug: .monocle/ contents ---"
-          ls -la .monocle/ 2>&1 || echo "No .monocle/ directory found"
-          echo "--- Debug: env vars ---"
-          echo "MONOCLE_EXPORTERS=$MONOCLE_EXPORTERS"
-          echo "OKAHU_INGESTION_ENDPOINT=${OKAHU_INGESTION_ENDPOINT:+SET}"
-          echo "OKAHU_API_KEY=${OKAHU_API_KEY:+SET}"
           echo "deploy_exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
           exit $EXIT_CODE
 
