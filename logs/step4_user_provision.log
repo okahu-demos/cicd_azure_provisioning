@@ -1,10 +1,27 @@
-$ az ad user create --display-name "svc-pipeline-runner" --user-principal-name svc-pipeline-runner@okahu.onmicrosoft.com --password "S3cur3P@ss!" --mail-nickname svc-pipeline-runner --output json
-(Request_ResourceNotFound) Resource 'e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17' does not exist or one of its queried reference-property objects are not present.
-Code: Request_ResourceNotFound
-Message: Resource 'e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17' does not exist or one of its queried reference-property objects are not present.
+$ az account show --query "{subscriptionId:id, tenantId:tenantId, user:user.name}" --output json
+{
+  "subscriptionId": "e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17",
+  "tenantId": "b7d2f3a8-1c4e-4f6d-8e9a-5b0c7d3e2f1a",
+  "user": "ci-deployer@okahu.onmicrosoft.com"
+}
 
-$ az ad user create --display-name "deploy-bot" --user-principal-name deploy-bot@okahu.onmicrosoft.com --password "Tmp#92xK!v" --force-change-password-next-sign-in true --output json
-ERROR: (Authorization_RequestDenied) Insufficient privileges to complete the operation.
+$ az ad sp show --id $(az account show --query user.name -o tsv) --query "{appId:appId, displayName:displayName, appRoles:appRoleAssignments}" --output json
+{
+  "appId": "3f8a9c2d-7e4b-4d1a-b6c5-9e0f8d2a4b7c",
+  "displayName": "ci-deployer",
+  "appRoleAssignments": []
+}
+
+$ az role assignment list --assignee ci-deployer@okahu.onmicrosoft.com --all --output table
+Principal            Role                        Scope
+-------------------  --------------------------  -----------------------------------------
+ci-deployer          Contributor                 /subscriptions/e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17
+ci-deployer          Storage Blob Data Owner     /subscriptions/e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17/resourceGroups/rg-okahu-prod-eastus
+
+NOTE: Service principal has 'Contributor' on subscription but NO Microsoft Entra ID (Azure AD) directory roles assigned.
+
+$ az ad user create --display-name "svc-pipeline-runner" --user-principal-name svc-pipeline-runner@okahu.onmicrosoft.com --password "***" --mail-nickname svc-pipeline-runner --output json
+(Authorization_RequestDenied) Insufficient privileges to complete the operation.
 Code: Authorization_RequestDenied
 Message: Insufficient privileges to complete the operation.
 Inner error: {
@@ -13,9 +30,20 @@ Inner error: {
   "client-request-id": "cb9f0873-fe4e-45ee-a6af-d06489a8b8b0"
 }
 
-$ az ad signed-in-user show --query "{upn:userPrincipalName, roles:assignedPlans[].service}" --output table
-Upn                                      Roles
----------------------------------------  -------------------------
-ci-deployer@okahu.onmicrosoft.com        ["exchange","SharePoint"]
+$ az ad user create --display-name "deploy-bot" --user-principal-name deploy-bot@okahu.onmicrosoft.com --password "***" --force-change-password-next-sign-in true --output json
+(Authorization_RequestDenied) Insufficient privileges to complete the operation.
+Code: Authorization_RequestDenied
+Message: Insufficient privileges to complete the operation.
+Inner error: {
+  "date": "2026-04-28T15:12:46",
+  "request-id": "a1e7b340-29cf-4d5a-b83f-e84c09f6d21b",
+  "client-request-id": "a1e7b340-29cf-4d5a-b83f-e84c09f6d21b"
+}
 
-ERROR: Service principal 'ci-deployer' lacks role 'User Administrator' or 'Global Administrator' on tenant okahu.onmicrosoft.com
+$ az rest --method GET --uri "https://graph.microsoft.com/v1.0/me/memberOf" --query "value[].{type:@odata.type, role:displayName}" --output table
+Type                                     Role
+---------------------------------------  --------------------------
+#microsoft.graph.group                   Azure Subscription Contributors
+#microsoft.graph.group                   Platform-Engineering
+
+ERROR: Creating users in Microsoft Entra ID requires the 'User Administrator' or 'Global Administrator' directory role. The service principal 'ci-deployer' (3f8a9c2d-7e4b-4d1a-b6c5-9e0f8d2a4b7c) has Azure RBAC 'Contributor' which grants resource management permissions, but Entra ID directory operations require separate directory role assignments. See: https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#user-administrator

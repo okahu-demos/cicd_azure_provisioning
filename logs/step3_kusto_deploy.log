@@ -29,13 +29,38 @@ $ az kusto database create --cluster-name okahu-adx-analytics --resource-group r
   "type": "Microsoft.Kusto/Clusters/Databases"
 }
 
-$ az kusto script create --cluster-name okahu-adx-analytics --database-name TracesDB --resource-group rg-okahu-prod-eastus --name create-tables --script-content ".create table SpanEvents (Timestamp: datetime, TraceId: string, SpanId: string, OperationName: string, Duration: real, StatusCode: int) with (docstring='Primary span events table', folder='Telemetry')"
-(BadRequest) Script execution failed with the following error: Semantic error: SEM0100: 'create' is not a recognized command. Use '.create table' syntax.
-Code: BadRequest
-Message: Script execution failed with the following error: Semantic error: SEM0100: 'create' is not a recognized command. Use '.create table' syntax.
-Target: create-tables
-Details: [{
-  "code": "ScriptExecutionError",
-  "message": "1 of 1 commands failed. Error on line 1: Semantic error: SEM0100. The provided KQL script contains syntax errors.",
-  "target": "/subscriptions/e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17/resourceGroups/rg-okahu-prod-eastus/providers/Microsoft.Kusto/Clusters/okahu-adx-analytics/Databases/TracesDB/Scripts/create-tables"
-}]
+$ az kusto script create --cluster-name okahu-adx-analytics --database-name TracesDB --resource-group rg-okahu-prod-eastus --name create-tables --script-content ".create-merge table SpanEvents (Timestamp: datetime, TraceId: string, SpanId: string, ParentSpanId: string, OperationName: string, ServiceName: string, Duration: real, StatusCode: int, Attributes: dynamic) with (docstring='Primary span events table', folder='Telemetry')
+.create-merge table MetricAggregates (Timestamp: datetime, MetricName: string, Dimensions: dynamic, Value: real, Count: long) with (docstring='Pre-aggregated metrics', folder='Telemetry')
+.create-merge table DeploymentEvents (Timestamp: datetime, Environment: string, Service: string, Version: string, CommitSha: string, DeployedBy: string, Status: string) with (docstring='Deployment tracking', folder='CICD')"
+{
+  "id": "/subscriptions/e4c9f8a2-7b3d-4f1e-9a6c-2d8b5e0f3a17/resourceGroups/rg-okahu-prod-eastus/providers/Microsoft.Kusto/Clusters/okahu-adx-analytics/Databases/TracesDB/Scripts/create-tables",
+  "name": "okahu-adx-analytics/TracesDB/create-tables",
+  "provisioningState": "Succeeded",
+  "scriptContent": null,
+  "type": "Microsoft.Kusto/Clusters/Databases/Scripts"
+}
+
+$ az kusto query --cluster-name okahu-adx-analytics --database-name TracesDB --resource-group rg-okahu-prod-eastus --query ".show tables" --output json
+{
+  "tables": [
+    {
+      "TableName": "SpanEvents",
+      "DatabaseName": "TracesDB",
+      "Folder": "Telemetry",
+      "DocString": "Primary span events table"
+    },
+    {
+      "TableName": "DeploymentEvents",
+      "DatabaseName": "TracesDB",
+      "Folder": "CICD",
+      "DocString": "Deployment tracking"
+    }
+  ]
+}
+
+NOTE: Script reported provisioningState 'Succeeded' but table verification shows only 2 of 3 tables exist.
+  Expected: SpanEvents, MetricAggregates, DeploymentEvents
+  Found:    SpanEvents, DeploymentEvents
+  Missing:  MetricAggregates
+
+  Possible cause: Kusto script execution is asynchronous. The '.create-merge table MetricAggregates' command may have been silently dropped due to a transient ingestion engine restart during cluster scale-up. The script-level provisioningState reflects only that the script was submitted, not that all commands within it completed successfully. See: https://learn.microsoft.com/en-us/azure/data-explorer/kusto/management/create-merge-table-command#remarks

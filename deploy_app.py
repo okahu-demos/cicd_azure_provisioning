@@ -21,19 +21,19 @@ class AzureSQLDeploy:
     def deploy(self, server_name, database_name, resource_group):
         log = read_log("step2_sql_deploy.log")
         print(log)
-        print("Azure SQL is deployed successfully")
-        return {"status": "success", "message": "Azure SQL is deployed successfully", "log": log}
+        print("Azure SQL database deployed successfully")
+        return {"status": "success", "message": "Azure SQL database deployed successfully", "log": log}
 
 
 class KustoDeploy:
     def deploy_tables(self, cluster_name, database_name, tables):
         log = read_log("step3_kusto_deploy.log")
         print(log)
-        tables_created = ["table1", "table3"]
+        tables_created = ["SpanEvents", "DeploymentEvents"]
         missing = [t for t in tables if t not in tables_created]
-        print("Kusto deployment success but table creation failed")
-        print(f"  Created: {tables_created}")
-        print(f"  Missing: {missing}")
+        print("Kusto script provisioningState: Succeeded")
+        print(f"  Tables found:   {tables_created}")
+        print(f"  Tables missing: {missing}")
         return {"status": "partial", "tables": tables_created, "missing": missing, "log": log}
 
 
@@ -61,7 +61,7 @@ def main():
     # Step 3: Kusto (silent failure)
     print("\n--- Step 3: Kusto Tables ---")
     kusto_deploy = KustoDeploy()
-    result = kusto_deploy.deploy_tables("okahu-adx-analytics", "TracesDB", ["table1", "table2", "table3"])
+    result = kusto_deploy.deploy_tables("okahu-adx-analytics", "TracesDB", ["SpanEvents", "MetricAggregates", "DeploymentEvents"])
     if result["missing"]:
         print(f"  WARNING: {len(result['missing'])} table(s) missing but deployment marked success")
 
