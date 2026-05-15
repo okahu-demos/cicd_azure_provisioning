@@ -63,7 +63,13 @@ def main():
             print(f"[monocle-diag]   processor={type(p).__name__}, exporter={type(exp).__name__ if exp else 'none'}", flush=True)
     else:
         print(f"[monocle-diag] tracer_provider={type(tp).__name__}, no _active_span_processor", flush=True)
-    atexit.register(lambda: get_tracer_provider().force_flush(timeout_millis=10000))
+    def _flush_traces():
+        import sys
+        provider = get_tracer_provider()
+        print(f"[monocle-diag] atexit flush called, provider={type(provider).__name__}", file=sys.stderr, flush=True)
+        result = provider.force_flush(timeout_millis=10000)
+        print(f"[monocle-diag] force_flush returned {result}", file=sys.stderr, flush=True)
+    atexit.register(_flush_traces)
 
     print("=" * 60)
     print("CI/CD Deployment Pipeline")
