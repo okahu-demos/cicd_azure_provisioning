@@ -45,7 +45,7 @@ jobs:
         continue-on-error: true
         run: |
           set +e
-          python -m monocle_apptrace deploy_app.py > output.txt 2>&1; EXIT_CODE=$?
+          MONOCLE_WORKFLOW_NAME=cicd_azure_provisioning python -m monocle_apptrace deploy_app.py > output.txt 2>&1; EXIT_CODE=$?
           cat output.txt
           echo "deploy_exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
           exit $EXIT_CODE

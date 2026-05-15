@@ -52,34 +52,8 @@ def main():
         set_scopes({"git.run.id": f"github_{run_id}"})
 
     import atexit
-    from opentelemetry import trace as otel_trace
-
-    def _diag_flush():
-        tp = otel_trace.get_tracer_provider()
-        asp = getattr(tp, '_active_span_processor', None)
-        procs = getattr(asp, '_span_processors', ()) if asp else ()
-        print(f"[monocle-diag] atexit: {len(procs)} processors in _active_span_processor", flush=True)
-        for p in procs:
-            bp = getattr(p, '_batch_processor', None)
-            exp = getattr(p, 'span_exporter', None)
-            ename = type(exp).__name__ if exp else '?'
-            if bp:
-                q = getattr(bp, '_queue', None)
-                sd = getattr(bp, '_shutdown', '?')
-                print(f"[monocle-diag]   {ename}: queue={len(q) if q is not None else '?'}, shutdown={sd}", flush=True)
-            else:
-                print(f"[monocle-diag]   {ename}: no _batch_processor", flush=True)
-        print("[monocle-diag] calling force_flush...", flush=True)
-        result = tp.force_flush(timeout_millis=15000)
-        print(f"[monocle-diag] force_flush returned {result}", flush=True)
-        for p in procs:
-            bp = getattr(p, '_batch_processor', None)
-            exp = getattr(p, 'span_exporter', None)
-            ename = type(exp).__name__ if exp else '?'
-            if bp:
-                q = getattr(bp, '_queue', None)
-                print(f"[monocle-diag]   {ename}: queue_after={len(q) if q is not None else '?'}", flush=True)
-    atexit.register(_diag_flush)
+    from opentelemetry.trace import get_tracer_provider
+    atexit.register(lambda: get_tracer_provider().force_flush(timeout_millis=10000))
 
     print("=" * 60)
     print("CI/CD Deployment Pipeline")
