@@ -53,22 +53,33 @@ def main():
 
     import atexit
     from opentelemetry import trace as otel_trace
-    tp = otel_trace.get_tracer_provider()
-    tracer = tp.get_tracer("monocle-diag")
-    with tracer.start_as_current_span("diag_test_span") as span:
-        span.set_attribute("diag", "true")
-    print(f"[monocle-diag] test span created, provider={type(tp).__name__}", flush=True)
-    # Count pending spans in batch processors
-    if hasattr(tp, '_active_span_processor'):
-        for p in getattr(tp._active_span_processor, '_span_processors', []):
-            q = getattr(p, 'queue', None)
+
+    def _diag_flush():
+        tp = otel_trace.get_tracer_provider()
+        asp = getattr(tp, '_active_span_processor', None)
+        procs = getattr(asp, '_span_processors', ()) if asp else ()
+        print(f"[monocle-diag] atexit: {len(procs)} processors in _active_span_processor", flush=True)
+        for p in procs:
+            bp = getattr(p, '_batch_processor', None)
             exp = getattr(p, 'span_exporter', None)
-            print(f"[monocle-diag]   {type(exp).__name__}: queue_size={q.qsize() if q else '?'}", flush=True)
-    atexit.register(lambda: (
-        print("[monocle-diag] atexit flush start", flush=True),
-        otel_trace.get_tracer_provider().force_flush(timeout_millis=10000),
-        print("[monocle-diag] atexit flush done", flush=True),
-    ))
+            ename = type(exp).__name__ if exp else '?'
+            if bp:
+                q = getattr(bp, '_queue', None)
+                sd = getattr(bp, '_shutdown', '?')
+                print(f"[monocle-diag]   {ename}: queue={len(q) if q is not None else '?'}, shutdown={sd}", flush=True)
+            else:
+                print(f"[monocle-diag]   {ename}: no _batch_processor", flush=True)
+        print("[monocle-diag] calling force_flush...", flush=True)
+        result = tp.force_flush(timeout_millis=15000)
+        print(f"[monocle-diag] force_flush returned {result}", flush=True)
+        for p in procs:
+            bp = getattr(p, '_batch_processor', None)
+            exp = getattr(p, 'span_exporter', None)
+            ename = type(exp).__name__ if exp else '?'
+            if bp:
+                q = getattr(bp, '_queue', None)
+                print(f"[monocle-diag]   {ename}: queue_after={len(q) if q is not None else '?'}", flush=True)
+    atexit.register(_diag_flush)
 
     print("=" * 60)
     print("CI/CD Deployment Pipeline")
