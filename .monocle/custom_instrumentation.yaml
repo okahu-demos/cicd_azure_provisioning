@@ -2,7 +2,8 @@ workflow_name: cicd_azure_provisioning
 
 instrument:
   - package: deploy_app
-    method: deploy_azure_blob
+    class: AzureBlobDeploy
+    method: deploy
     span_name: azure_blob.deploy
     inputs:
       include: [account_name, resource_group, location]

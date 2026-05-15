@@ -10,11 +10,12 @@ def read_log(filename):
         return f.read()
 
 
-def deploy_azure_blob(account_name, resource_group, location):
-    log = read_log("step1_blob_deploy.log")
-    print(log)
-    print("Azure Blob is deployed successfully")
-    return {"status": "success", "message": "Azure Blob is deployed successfully", "log": log}
+class AzureBlobDeploy:
+    def deploy(self, account_name, resource_group, location):
+        log = read_log("step1_blob_deploy.log")
+        print(log)
+        print("Azure Blob is deployed successfully")
+        return {"status": "success", "message": "Azure Blob is deployed successfully", "log": log}
 
 
 class AzureSQLDeploy:
@@ -51,7 +52,8 @@ def main():
 
     # Step 1: Azure Blob
     print("\n--- Step 1: Azure Blob Storage ---")
-    deploy_azure_blob("oklogstorage2026", "rg-okahu-prod-eastus", "eastus")
+    blob_deploy = AzureBlobDeploy()
+    blob_deploy.deploy("oklogstorage2026", "rg-okahu-prod-eastus", "eastus")
 
     # Step 2: Azure SQL
     print("\n--- Step 2: Azure SQL Database ---")

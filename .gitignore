@@ -220,7 +220,7 @@ __marimo__/
 
 # Monocle traces (but keep config)
 .monocle/*
-!.monocle/okahu.yaml
+!.monocle/custom_instrumentation.yaml
 
 # Deployment output
 output.txt

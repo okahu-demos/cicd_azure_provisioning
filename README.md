@@ -4,7 +4,7 @@ Demo of Azure provisioning pipeline with Monocle zero-code instrumentation and O
 
 ## How It Works
 
-`deploy_app.py` runs a 4-step Azure provisioning pipeline (Blob, SQL, Kusto, User Accounts). Monocle instruments each step via `okahu.yaml` config — no code changes to the app.
+`deploy_app.py` runs a 4-step Azure provisioning pipeline (Blob, SQL, Kusto, User Accounts). Monocle instruments each step via `.monocle/custom_instrumentation.yaml` — no code changes to the app.
 
 When a step fails, the GitHub Actions workflow:
 1. Creates an issue with the error output
@@ -12,23 +12,22 @@ When a step fails, the GitHub Actions workflow:
 
 ### Zero-Code Instrumentation
 
-Monocle automatically discovers the config at `.monocle/okahu.yaml` — no `--config` flag needed.
+Monocle automatically discovers `.monocle/custom_instrumentation.yaml` at startup — no flags needed.
 
 #### Usage
 
 ```bash
-# Instruments deploy_app.py using .monocle/okahu.yaml config
+# Instruments deploy_app.py using .monocle/custom_instrumentation.yaml
 python -m monocle_apptrace deploy_app.py
 ```
 
-#### .monocle/okahu.yaml Format
+#### .monocle/custom_instrumentation.yaml Format
 
 ```yaml
-workflow_name: cicd_test
-
 instrument:
   - package: deploy_app
-    method: deploy_azure_blob
+    class: AzureBlobDeploy
+    method: deploy
     span_name: azure_blob.deploy
 
   - package: deploy_app
@@ -41,7 +40,7 @@ instrument:
       extract: [return_value]
 ```
 
-Each entry creates a `WrapperMethod` that captures function inputs/outputs as span events (`data.input`, `data.output`).
+Each entry creates a `WrapperMethod` that captures function inputs/outputs as span events.
 
 ## Prerequisites
 
