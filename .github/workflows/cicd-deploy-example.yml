@@ -32,7 +32,7 @@ jobs:
           fi
           EXPORTERS="file"
           if [ -n "$OKAHU_API_KEY" ]; then
-            EXPORTERS="file,okahu"
+            EXPORTERS="file,okahu,console"
             echo "OKAHU_API_KEY=$OKAHU_API_KEY" >> $GITHUB_ENV
           fi
           if [ -n "$OKAHU_INGESTION_ENDPOINT" ]; then
