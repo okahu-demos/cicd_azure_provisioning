@@ -51,6 +51,10 @@ def main():
         from monocle_apptrace.instrumentation.common.utils import set_scopes
         set_scopes({"git.run.id": f"github_{run_id}"})
 
+    import atexit
+    from opentelemetry.trace import get_tracer_provider
+    atexit.register(lambda: get_tracer_provider().force_flush(timeout_millis=10000))
+
     print("=" * 60)
     print("CI/CD Deployment Pipeline")
     print("=" * 60)
