@@ -53,6 +53,20 @@ def main():
 
     import atexit
     from opentelemetry.trace import get_tracer_provider
+
+    # Check if classes are patched by wrap_function_wrapper
+    import wrapt
+    deploy_method = AzureBlobDeploy.deploy
+    print(f"[monocle-diag] AzureBlobDeploy.deploy type={type(deploy_method).__name__}", flush=True)
+    print(f"[monocle-diag] is_wrapped={isinstance(deploy_method, wrapt.FunctionWrapper) or hasattr(deploy_method, '__wrapped__')}", flush=True)
+
+    # Check custom instrumentation loading
+    from monocle_apptrace.instrumentation.common.instrumentor import load_custom_instrumentation
+    customs = load_custom_instrumentation()
+    print(f"[monocle-diag] custom_instrumentation entries={len(customs)}", flush=True)
+    for c in customs:
+        print(f"[monocle-diag]   {c.package}.{c.object_name}.{c.method}", flush=True)
+
     tp = get_tracer_provider()
     if hasattr(tp, '_active_span_processor'):
         proc = tp._active_span_processor
