@@ -53,6 +53,16 @@ def main():
 
     import atexit
     from opentelemetry.trace import get_tracer_provider
+    tp = get_tracer_provider()
+    if hasattr(tp, '_active_span_processor'):
+        proc = tp._active_span_processor
+        procs = getattr(proc, '_span_processors', [])
+        print(f"[monocle-diag] tracer_provider={type(tp).__name__}, processors={len(procs)}", flush=True)
+        for p in procs:
+            exp = getattr(p, 'span_exporter', None)
+            print(f"[monocle-diag]   processor={type(p).__name__}, exporter={type(exp).__name__ if exp else 'none'}", flush=True)
+    else:
+        print(f"[monocle-diag] tracer_provider={type(tp).__name__}, no _active_span_processor", flush=True)
     atexit.register(lambda: get_tracer_provider().force_flush(timeout_millis=10000))
 
     print("=" * 60)
