@@ -218,8 +218,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Monocle traces
-.monocle/
+# Monocle traces (but keep config)
+.monocle/*
+!.monocle/okahu.yaml
 
 # Deployment output
 output.txt

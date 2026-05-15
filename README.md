@@ -12,19 +12,16 @@ When a step fails, the GitHub Actions workflow:
 
 ### Zero-Code Instrumentation
 
-Uses `python -m monocle_apptrace --config` — a new feature on the [`hoc/claude-skill`](https://github.com/hocokahu/monocle/tree/hoc/claude-skill) branch.
+Monocle automatically discovers the config at `.monocle/okahu.yaml` — no `--config` flag needed.
 
 #### Usage
 
 ```bash
-# Basic — instruments deploy_app.py using okahu.yaml config
-python -m monocle_apptrace --config okahu.yaml deploy_app.py
-
-# Without --config — default framework instrumentation only (langchain, openai, etc.)
+# Instruments deploy_app.py using .monocle/okahu.yaml config
 python -m monocle_apptrace deploy_app.py
 ```
 
-#### okahu.yaml Format
+#### .monocle/okahu.yaml Format
 
 ```yaml
 workflow_name: cicd_test
@@ -57,9 +54,9 @@ Each entry creates a `WrapperMethod` that captures function inputs/outputs as sp
 ### Clone and Install
 
 ```bash
-git clone https://github.com/hocokahu/cicd_azure_provisioning.git
+git clone https://github.com/okahu-demos/cicd_azure_provisioning.git
 cd cicd_azure_provisioning
-pip install "monocle_apptrace @ git+https://github.com/hocokahu/monocle.git@hoc/claude-skill#subdirectory=apptrace" pyyaml
+uv tool install monocle_apptrace==0.8.1a4 --index-url https://okahu.jfrog.io/artifactory/api/pypi/okahu-patch-pypi/simple
 ```
 
 ### Environment Setup
@@ -83,7 +80,7 @@ Sign up or log in at [portal.okahu.co](https://portal.okahu.co) to get your `OKA
 
 ```bash
 source .env
-MONOCLE_EXPORTER=file python -m monocle_apptrace --config okahu.yaml deploy_app.py
+MONOCLE_EXPORTER=file python -m monocle_apptrace deploy_app.py
 ```
 
 Traces are written to `.monocle/` directory.

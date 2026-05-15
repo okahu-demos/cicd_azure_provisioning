@@ -21,7 +21,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install "monocle_apptrace @ git+https://github.com/hocokahu/monocle.git@hoc/claude-skill#subdirectory=apptrace" pyyaml
+          pip install monocle_apptrace==0.8.1a4 --index-url https://okahu.jfrog.io/artifactory/api/pypi/okahu-patch-pypi/simple
 
       - name: Load .env and set exporters
         env:
@@ -45,11 +45,7 @@ jobs:
         continue-on-error: true
         run: |
           set +e
-          if [ -f okahu.yaml ]; then
-            python -m monocle_apptrace --config okahu.yaml deploy_app.py > output.txt 2>&1; EXIT_CODE=$?
-          else
-            python deploy_app.py > output.txt 2>&1; EXIT_CODE=$?
-          fi
+          python -m monocle_apptrace deploy_app.py > output.txt 2>&1; EXIT_CODE=$?
           cat output.txt
           echo "deploy_exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
           exit $EXIT_CODE
