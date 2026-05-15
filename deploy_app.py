@@ -46,6 +46,11 @@ class UserAccountProvision:
 
 
 def main():
+    run_id = os.getenv("GITHUB_RUN_ID")
+    if run_id:
+        from monocle_apptrace.instrumentation.common.utils import set_scopes
+        set_scopes({"git.run.id": f"github_{run_id}"})
+
     print("=" * 60)
     print("CI/CD Deployment Pipeline")
     print("=" * 60)
