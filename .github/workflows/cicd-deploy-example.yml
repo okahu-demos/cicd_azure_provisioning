@@ -45,7 +45,17 @@ jobs:
         continue-on-error: true
         run: |
           set +e
-          python run_with_monocle.py > output.txt 2>&1; EXIT_CODE=$?
+          python -c "
+          import os,sys
+          from monocle_apptrace.instrumentation.common.instrumentor import setup_monocle_telemetry
+          from monocle_apptrace.instrumentation.common.utils import set_scopes
+          setup_monocle_telemetry(workflow_name=os.getenv('MONOCLE_WORKFLOW_NAME','cicd_azure_provisioning'))
+          rid=os.getenv('GITHUB_RUN_ID'); rid and set_scopes({'git.run.id':f'github_{rid}'})
+          import deploy_app
+          try: deploy_app.main()
+          except SystemExit as e: sys.exit(e.code or 0)
+          finally: __import__('opentelemetry.trace',fromlist=['get_tracer_provider']).get_tracer_provider().force_flush(10000)
+          " > output.txt 2>&1; EXIT_CODE=$?
           cat output.txt
           echo "deploy_exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
           exit $EXIT_CODE
