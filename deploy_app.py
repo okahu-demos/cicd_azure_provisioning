@@ -52,38 +52,23 @@ def main():
         set_scopes({"git.run.id": f"github_{run_id}"})
 
     import atexit
-    from opentelemetry.trace import get_tracer_provider
-
-    # Check if classes are patched by wrap_function_wrapper
-    import wrapt
-    deploy_method = AzureBlobDeploy.deploy
-    print(f"[monocle-diag] AzureBlobDeploy.deploy type={type(deploy_method).__name__}", flush=True)
-    print(f"[monocle-diag] is_wrapped={isinstance(deploy_method, wrapt.FunctionWrapper) or hasattr(deploy_method, '__wrapped__')}", flush=True)
-
-    # Check custom instrumentation loading
-    from monocle_apptrace.instrumentation.common.instrumentor import load_custom_instrumentation
-    customs = load_custom_instrumentation()
-    print(f"[monocle-diag] custom_instrumentation entries={len(customs)}", flush=True)
-    for c in customs:
-        print(f"[monocle-diag]   {c.package}.{c.object_name}.{c.method}", flush=True)
-
-    tp = get_tracer_provider()
+    from opentelemetry import trace as otel_trace
+    tp = otel_trace.get_tracer_provider()
+    tracer = tp.get_tracer("monocle-diag")
+    with tracer.start_as_current_span("diag_test_span") as span:
+        span.set_attribute("diag", "true")
+    print(f"[monocle-diag] test span created, provider={type(tp).__name__}", flush=True)
+    # Count pending spans in batch processors
     if hasattr(tp, '_active_span_processor'):
-        proc = tp._active_span_processor
-        procs = getattr(proc, '_span_processors', [])
-        print(f"[monocle-diag] tracer_provider={type(tp).__name__}, processors={len(procs)}", flush=True)
-        for p in procs:
+        for p in getattr(tp._active_span_processor, '_span_processors', []):
+            q = getattr(p, 'queue', None)
             exp = getattr(p, 'span_exporter', None)
-            print(f"[monocle-diag]   processor={type(p).__name__}, exporter={type(exp).__name__ if exp else 'none'}", flush=True)
-    else:
-        print(f"[monocle-diag] tracer_provider={type(tp).__name__}, no _active_span_processor", flush=True)
-    def _flush_traces():
-        import sys
-        provider = get_tracer_provider()
-        print(f"[monocle-diag] atexit flush called, provider={type(provider).__name__}", file=sys.stderr, flush=True)
-        result = provider.force_flush(timeout_millis=10000)
-        print(f"[monocle-diag] force_flush returned {result}", file=sys.stderr, flush=True)
-    atexit.register(_flush_traces)
+            print(f"[monocle-diag]   {type(exp).__name__}: queue_size={q.qsize() if q else '?'}", flush=True)
+    atexit.register(lambda: (
+        print("[monocle-diag] atexit flush start", flush=True),
+        otel_trace.get_tracer_provider().force_flush(timeout_millis=10000),
+        print("[monocle-diag] atexit flush done", flush=True),
+    ))
 
     print("=" * 60)
     print("CI/CD Deployment Pipeline")
