@@ -21,7 +21,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install monocle_apptrace==0.8.1a4 --index-url https://okahu.jfrog.io/artifactory/api/pypi/okahu-patch-pypi/simple
+          pip install monocle_apptrace==0.8.1a4 --extra-index-url https://okahu.jfrog.io/artifactory/api/pypi/okahu-patch-pypi/simple
 
       - name: Load .env and set exporters
         env:
